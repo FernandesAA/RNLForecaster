@@ -1,18 +1,21 @@
 library(neuralnet)
+library(tictoc)
 
-setwd("~/STEPHAN/macaiba/")
+tic("Total")
 
-#for (hh in sprintf("%02.0f", seq(0,72,6))) {
-for (hh in "24"){
+for (hh in sprintf("%02.0f", seq(06,72,6))) {
+#for (hh in "06"){
 	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv$", sep=""))
 #    for (f in 1:length(files)){
-	for (i in 1) {
-		print (files[i])
+	for (i in 1:length(files)) {
+	  
+	  tic(files[i])
+	  set.seed(17)
+	  tic("Dados")
 		data_complete <- read.csv(files[i], header=F)
 		
-		data <- data_complete[,c(8, 12, 14)]
-		
-		colnames(data) <- c("psnm", "cape", "pwt")
+		data <- data_complete[,c(8, 12, 13, 14)]
+		colnames(data) <- c("psnm", "cape", "cine","pwt")
 		
 		td925 <- data_complete$V37 - 2*273.13 - (100 - data_complete$V44)/5.0
 		td800 <- data_complete$V38 - 2*273.13 - (100-data_complete$V45)/5.0
@@ -32,6 +35,9 @@ for (hh in "24"){
 		data[["o500"]] <- data_complete[,54]
 		
 		data[["d"]] <- data_complete[,64]
+		data <- data[sample(nrow(data), nrow(data)), ]
+		datac <- data
+		data <- data[1:4600,]
 		
 		index <- sample(1:nrow(data),round(0.80*nrow(data)))
 		train <- data[index,]
@@ -49,22 +55,33 @@ for (hh in "24"){
 		
 		n <- names(train_)
 		f <- as.formula(paste("d ~", paste(n[!n %in% "d"], collapse = " + ")))
-		nn <- neuralnet(f,data=train_,hidden=c(12,3), lifesign="full", linear.output=T, threshold=0.01, stepmax=250000)
-		
+		toc()
+		tic("Treinamento")
+		set.seed(17)
+		nn <- neuralnet(f,data=train_,hidden=c(12,2), 
+		                lifesign="none", 
+		                linear.output=T, 
+		                threshold=0.01, 
+		                stepmax=1e6, 
+		                err.fct="sse",
+		                act.fct = "logistic")
+		toc()
+		tic ("Previsão")
 		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1])
 		pr.nn_ <- pr.nn$net.result*(max(data$d)-min(data$d))+min(data$d)
+		toc()
 		test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d)
 		
 		MSE.nn <- sum((test.r - pr.nn_)^2)/nrow(test_)
 		
-		print(paste(MSE.lm,MSE.nn))
+#		print(paste(MSE.lm,MSE.nn))
 		
 		plot(test$d, pr.nn_,col='red',main='Real vs predicted NN',pch=18,cex=0.7)
 		abline(0,1,lwd=2)
 		legend('bottomright',legend='NN',pch=18,col='red', bty='n')
 		
 		tabnn <- as.integer(pr.nn_>=0.01)
-		tabts <- as.integer(test$V64>=0.01)*2   # OBSERVADO
+		tabts <- as.integer(test$d>=0.01)*2   # OBSERVADO
 
 		tab <- tabnn + tabts
 		
@@ -73,10 +90,15 @@ for (hh in "24"){
 		falm <- sum(as.integer(tab==1))
 		corj <- sum(as.integer(tab==0))
 
-		print (c(hits, miss))
-		print (c(falm, corj))
+		print(sprintf("%s", files[i]))
+		print(sprintf("%d  %d", hits, miss))
+		print(sprintf("%d  %d", falm, corj))
+	  print(sprintf("%s%03.1f%%", "ACC=", (hits+corj)/(hits+miss+falm+corj)*100))
+		print ("----------------------------------------------------")
 
-		print ((hits+corj)/(hits+miss+falm+corj))
-		
+		toc()
+	
 	}
 }
+
+toc ()

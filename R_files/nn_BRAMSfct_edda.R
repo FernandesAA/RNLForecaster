@@ -1,103 +1,112 @@
-library(neuralnet)
-library(tictoc)
+# Autor: Fernandes, A. A.
+library(neuralnet) 
+library(tictoc)  # biblioteca para medicao de tempo
 
 tic("Total")
 
-for (hh in sprintf("%02.0f", seq(06,72,6))) {
+for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18, 24, 30, 36, ..., 72
 #for (hh in "06"){
-	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv$", sep=""))
-#    for (f in 1:length(files)){
-	for (i in 1:length(files)) {
+	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv$", sep=""))  # cria lista dos arquivos particionados
+#    for (f in 1:length(files)){ # loop nos diversos arquivos(particionados) das previsoes
+	for (i in 1:1) { 
 	  
 	  tic(files[i])
-	  set.seed(17)
+	  
+	  set.seed(17) # fixa a semente para evitar randomizar cada teste
+	  
 	  tic("Dados")
-		data_complete <- read.csv(files[i], header=F)
+	  
+		data_complete <- read.csv(files[i], header=F) # abre o arquivo CSV em um dataframe
 		
-		data <- data_complete[,c(8, 12, 13, 14)]
-		colnames(data) <- c("psnm", "cape", "cine","pwt")
+		data <- data_complete[,c(8, 12, 13, 14)] # extrai apenas os campos de interesse para o dataframe "data"
+		colnames(data) <- c("psnm", "cape", "cine","pwt") # nomeia os campos de interesse no cabeçlho do dataframe
 		
-		td925 <- data_complete$V37 - 2*273.13 - (100 - data_complete$V44)/5.0
-		td800 <- data_complete$V38 - 2*273.13 - (100-data_complete$V45)/5.0
-		td700 <- data_complete$V39 - 2*273.13 - (100 - data_complete$V46)/5.0
+		td925 <- data_complete$V37 - 2*273.13 - (100 - data_complete$V44)/5.0 # calcula td925
+		td800 <- data_complete$V38 - 2*273.13 - (100-data_complete$V45)/5.0   # calcula td800
+		td700 <- data_complete$V39 - 2*273.13 - (100 - data_complete$V46)/5.0 # calcula td700
 		
-		data[["totals"]] <- (data_complete$V37 - (2*273.13)) + td925 - 2.0 * (data_complete$V40 - (2*273.13))
+		data[["totals"]] <- (data_complete$V37 - (2*273.13)) + td925 - 2.0 * (data_complete$V40 - (2*273.13)) # calcula TTs
 		
-		data[["k"]] <- (data_complete$V37-2*273.13) - (data_complete$V40-2*273.15) + 
+		data[["k"]] <- (data_complete$V37-2*273.13) - (data_complete$V40-2*273.15) +   # calcula k index
 		                          td800 - (data_complete$V39 - (2*273.13) - td700)
 		
-		data[["z925"]] <- data_complete[,30]
-		data[["z800"]] <- data_complete[,31]
-		data[["z500"]] <- data_complete[,33]
+		data[["z925"]] <- data_complete[,30] # escreve no dataframe a variavel z925 como atributo
+		data[["z800"]] <- data_complete[,31] # escreve no dataframe como atributo
+		data[["z500"]] <- data_complete[,33] # escreve no dataframe como atributo
 		
-		data[["o925"]] <- data_complete[,51]
-		data[["o800"]] <- data_complete[,52]
-		data[["o500"]] <- data_complete[,54]
+		data[["o925"]] <- data_complete[,51] # escreve no dataframe como atributo
+		data[["o800"]] <- data_complete[,52] # escreve no dataframe como atributo
+		data[["o500"]] <- data_complete[,54] # escreve no dataframe como atributo
 		
-		data[["d"]] <- data_complete[,64]
-		data <- data[sample(nrow(data), nrow(data)), ]
-		datac <- data
-		data <- data[1:4600,]
+		data[["d"]] <- data_complete[,64] # escreve no dataframe como atributo
+		data <- data[sample(nrow(data), nrow(data)), ] # embaralha o dataframe data
+		data <- data[1:2400,] # corta apenas as primeiras 2400 linhas do dataframe
 		
-		index <- sample(1:nrow(data),round(0.80*nrow(data)))
-		train <- data[index,]
-		test <- data[-index,]
-		lm.fit <- glm(d~., data=train)
-		summary(lm.fit)
-		pr.lm <- predict(lm.fit,test)
-		MSE.lm <- sum((pr.lm - test$d)^2)/nrow(test)
+		index <- sample(1:nrow(data),round(0.80*nrow(data))) # embaralha novamente as 2400 linhas e corta em 80% os índices do dataframe
+		train <- data[index,]  # filtra todos os dados indexados
+		test <- data[-index,]  # filtra todos os dados que não foram indexados
+
+		maxs <- apply(data, 2, max) # procura pelo maior valor de cada atributos
+		mins <- apply(data, 2, min) # procura pelo menor valor de cada atributos
+		scaled <- as.data.frame(scale(data, center = mins, scale = maxs - mins)) # normaliza os dados baseado nos mínimos e máximos
+		train_ <- scaled[index,] # dados normalizados para treinamemto
+		test_ <- scaled[-index,] # dados normalizados para testes
 		
-		maxs <- apply(data, 2, max) 
-		mins <- apply(data, 2, min)
-		scaled <- as.data.frame(scale(data, center = mins, scale = maxs - mins))
-		train_ <- scaled[index,]
-		test_ <- scaled[-index,]
+		n <- names(train_) # captura os nomes dos atributos de treinamento, para criar a fŕomula de inserção na rede neural
+		f <- as.formula(paste("d ~", paste(n[!n %in% "d"], collapse = " + "))) # cria a fórmula da rede
 		
-		n <- names(train_)
-		f <- as.formula(paste("d ~", paste(n[!n %in% "d"], collapse = " + ")))
 		toc()
+		
 		tic("Treinamento")
-		set.seed(17)
-		nn <- neuralnet(f,data=train_,hidden=c(12,2), 
-		                lifesign="none", 
-		                linear.output=T, 
-		                threshold=0.01, 
-		                stepmax=1e6, 
-		                err.fct="sse",
-		                act.fct = "logistic")
-		toc()
-		tic ("Previsão")
-		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1])
-		pr.nn_ <- pr.nn$net.result*(max(data$d)-min(data$d))+min(data$d)
-		toc()
-		test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d)
 		
-		MSE.nn <- sum((test.r - pr.nn_)^2)/nrow(test_)
+		set.seed(17) # mantém a semente fixa em 17
+		nn <- neuralnet(f,data=train_,hidden=c(12,2), # executa a rede com 2 camadas ocultas, com 12 e 2 neurônios, e treina com train_ normalizado
+		                lifesign="minimal",  # nível de informação a ser impressa na tela
+		                linear.output=T, # dado contínuo, não classificado
+		                threshold=0.01, # valor de parada
+		                stepmax=1e6, # passos máximos da rede
+		                err.fct="sse", # tipo erro a ser calculado, sum of square error
+		                act.fct = "logistic") # função de ativação
+		toc()
+		
+		tic ("Previsão")
+		
+		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1]) # faz a previsão com os dados de testes normalizados
+		pr.nn_ <- pr.nn$net.result*(max(data$d)-min(data$d))+min(data$d) # retorna o resultado para os valores não normalizados
+		
+		#test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d) # retorna os dados de output do teste que havia sido normalizado. Mesmo que teste$d
+		
+		toc()
+		
+		MSE.nn <- sum((test$d - pr.nn_)^2)/nrow(test_)
 		
 #		print(paste(MSE.lm,MSE.nn))
 		
+		# plota o gráfico de dispressao
 		plot(test$d, pr.nn_,col='red',main='Real vs predicted NN',pch=18,cex=0.7)
 		abline(0,1,lwd=2)
 		legend('bottomright',legend='NN',pch=18,col='red', bty='n')
 		
-		tabnn <- as.integer(pr.nn_>=0.01)
-		tabts <- as.integer(test$d>=0.01)*2   # OBSERVADO
+		# calcula as tabelas de contingencia
+		tabnn <- as.integer(pr.nn_>=0.01)     # PREVISAO:  FO=1, NFO=0
+		tabts <- as.integer(test$d>=0.01)*2   # OBSERVADO: FO=2, NFO=0
 
-		tab <- tabnn + tabts
+		tab <- tabnn + tabts # soma previsao + observado, gerando 4 valores possiveis: 
 		
-		hits <- sum(as.integer(tab==3))
-		miss <- sum(as.integer(tab==2))
-		falm <- sum(as.integer(tab==1))
-		corj <- sum(as.integer(tab==0))
+		hits <- sum(as.integer(tab==3))   #previsto=1 + observado=2  -> ACERTO (hits==3)
+		miss <- sum(as.integer(tab==2))   #previsto=0 + observado=2  -> ERRO   (missing==2)
+		falm <- sum(as.integer(tab==1))   #previsto=1 + observado=0  -> ERRO   (false alarm==1)
+		corj <- sum(as.integer(tab==0))   #previsto=0 + observado=0  -> ACERTO (Correct rejected==0 )
 
+		# Imprime informacoes na tela
 		print(sprintf("%s", files[i]))
-		print(sprintf("%d  %d", hits, miss))
-		print(sprintf("%d  %d", falm, corj))
+		print(sprintf("%d  %d", hits, falm))
+		print(sprintf("%d  %d", miss, corj))
 	  print(sprintf("%s%03.1f%%", "ACC=", (hits+corj)/(hits+miss+falm+corj)*100))
-		print ("----------------------------------------------------")
 
 		toc()
-	
+		print ("----------------------------------------------------")
+		
 	}
 }
 

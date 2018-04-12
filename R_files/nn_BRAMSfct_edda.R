@@ -1,15 +1,16 @@
 # Autor: Fernandes, A. A.
+library (ggplot2)
 library(neuralnet) 
 library(tictoc)  # biblioteca para medicao de tempo
 
 tic("Total")
 
 for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18, 24, 30, 36, ..., 72
-#for (hh in "06"){
+#for (hh in "24"){
 	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv$", sep=""))  # cria lista dos arquivos particionados
 #    for (f in 1:length(files)){ # loop nos diversos arquivos(particionados) das previsoes
 	for (i in 1:1) { 
-	  
+	  print (files[i])
 	  tic(files[i])
 	  
 	  set.seed(17) # fixa a semente para evitar randomizar cada teste
@@ -40,7 +41,14 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		
 		data[["d"]] <- data_complete[,64] # escreve no dataframe como atributo
 		data <- data[sample(nrow(data), nrow(data)), ] # embaralha o dataframe data
-		data <- data[1:2400,] # corta apenas as primeiras 2400 linhas do dataframe
+		data <- data[1:2200,] # corta apenas as primeiras 2400 linhas do dataframe
+		
+		pdf.dFO <- density (data[data$d>=0.01,]$d)
+		pdf.dNFO <- density (data[data$d<0.01,]$d)
+		
+		ggplot() +
+		  geom_density(data = data[data$d<0.01,], aes(x=d)) +
+		geom_density(data = data[data$d<0.01,], aes(x=d))
 		
 		index <- sample(1:nrow(data),round(0.80*nrow(data))) # embaralha novamente as 2400 linhas e corta em 80% os índices do dataframe
 		train <- data[index,]  # filtra todos os dados indexados
@@ -60,13 +68,19 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		tic("Treinamento")
 		
 		set.seed(17) # mantém a semente fixa em 17
+		
 		nn <- neuralnet(f,data=train_,hidden=c(12,2), # executa a rede com 2 camadas ocultas, com 12 e 2 neurônios, e treina com train_ normalizado
-		                lifesign="minimal",  # nível de informação a ser impressa na tela
+		                lifesign="full",  lifesign.step=10000, # nível de informação a ser impressa na tela
 		                linear.output=T, # dado contínuo, não classificado
-		                threshold=0.01, # valor de parada
-		                stepmax=1e6, # passos máximos da rede
+		                threshold=0.0016, # valor de parada
+		                stepmax=2e6, # passos máximos da rede
 		                err.fct="sse", # tipo erro a ser calculado, sum of square error
-		                act.fct = "logistic") # função de ativação
+		                act.fct = "tanh",
+		                algorithm = "rprop+") # função de ativação
+
+		w <- nn$weights
+		write.table(unlist(w), paste("../data_files/weights_", files[i], sep = ""))
+
 		toc()
 		
 		tic ("Previsão")
@@ -74,7 +88,7 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1]) # faz a previsão com os dados de testes normalizados
 		pr.nn_ <- pr.nn$net.result*(max(data$d)-min(data$d))+min(data$d) # retorna o resultado para os valores não normalizados
 		
-		#test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d) # retorna os dados de output do teste que havia sido normalizado. Mesmo que teste$d
+		#test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d) # retorna os dados de output do teste que haviam sido normalizado. Mesmo que teste$d
 		
 		toc()
 		
@@ -99,6 +113,8 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		corj <- sum(as.integer(tab==0))   #previsto=0 + observado=0  -> ACERTO (Correct rejected==0 )
 
 		# Imprime informacoes na tela
+		print(sprintf("Treinamento: %d dados", length(train_[,1])))
+		print(sprintf("Validação: %d dados", length(test_[,1])))
 		print(sprintf("%s", files[i]))
 		print(sprintf("%d  %d", hits, falm))
 		print(sprintf("%d  %d", miss, corj))
@@ -106,6 +122,7 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 
 		toc()
 		print ("----------------------------------------------------")
+      
 		
 	}
 }

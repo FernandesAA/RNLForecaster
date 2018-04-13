@@ -4,26 +4,27 @@ library(neuralnet)
 library(tictoc)  # biblioteca para medicao de tempo
 
 tic("Total")
+nrepet <- 10
 
 for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18, 24, 30, 36, ..., 72
 #for (hh in "24"){
-	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv$", sep=""))  # cria lista dos arquivos particionados
-#    for (f in 1:length(files)){ # loop nos diversos arquivos(particionados) das previsoes
-	for (i in 1:1) { 
+	files <- list.files(pattern = paste("dados_",hh,"fct_..\\.csv_fmt$", sep=""))  # cria lista dos arquivos particionados
+    for (f in 1:length(files)){ # loop nos diversos arquivos(particionados) das previsoes
+#	for (i in 1:1) { 
 	  print (files[i])
 	  tic(files[i])
 	  
-	  set.seed(17) # fixa a semente para evitar randomizar cada teste
+#	  set.seed(17) # fixa a semente para evitar randomizar cada teste
 	  
 	  tic("Dados")
 	  
 		data_complete <- read.csv(files[i], header=F) # abre o arquivo CSV em um dataframe
-		
+
 		data <- data_complete[,c(8, 12, 13, 14)] # extrai apenas os campos de interesse para o dataframe "data"
 		colnames(data) <- c("psnm", "cape", "cine","pwt") # nomeia os campos de interesse no cabeçlho do dataframe
 		
 		td925 <- data_complete$V37 - 2*273.13 - (100 - data_complete$V44)/5.0 # calcula td925
-		td800 <- data_complete$V38 - 2*273.13 - (100-data_complete$V45)/5.0   # calcula td800
+		td800 <- data_complete$V38 - 2*273.13 - (100 - data_complete$V45)/5.0   # calcula td800
 		td700 <- data_complete$V39 - 2*273.13 - (100 - data_complete$V46)/5.0 # calcula td700
 		
 		data[["totals"]] <- (data_complete$V37 - (2*273.13)) + td925 - 2.0 * (data_complete$V40 - (2*273.13)) # calcula TTs
@@ -41,14 +42,14 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		
 		data[["d"]] <- data_complete[,64] # escreve no dataframe como atributo
 		data <- data[sample(nrow(data), nrow(data)), ] # embaralha o dataframe data
-		data <- data[1:2200,] # corta apenas as primeiras 2400 linhas do dataframe
+		data <- data[1:3200,] # corta apenas as primeiras 2400 linhas do dataframe
 		
-		pdf.dFO <- density (data[data$d>=0.01,]$d)
-		pdf.dNFO <- density (data[data$d<0.01,]$d)
-		
-		ggplot() +
-		  geom_density(data = data[data$d<0.01,], aes(x=d)) +
-		geom_density(data = data[data$d<0.01,], aes(x=d))
+#		pdf.dFO <- density (data[data$d>=0.01,]$d)
+#		pdf.dNFO <- density (data[data$d<0.01,]$d)
+#		
+#		ggplot() +
+#		  geom_density(data = data[data$d<0.01,], aes(x=d)) +
+#		geom_density(data = data[data$d<0.01,], aes(x=d))
 		
 		index <- sample(1:nrow(data),round(0.80*nrow(data))) # embaralha novamente as 2400 linhas e corta em 80% os índices do dataframe
 		train <- data[index,]  # filtra todos os dados indexados
@@ -72,10 +73,10 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		nn <- neuralnet(f,data=train_,hidden=c(12,2), # executa a rede com 2 camadas ocultas, com 12 e 2 neurônios, e treina com train_ normalizado
 		                lifesign="full",  lifesign.step=10000, # nível de informação a ser impressa na tela
 		                linear.output=T, # dado contínuo, não classificado
-		                threshold=0.0016, # valor de parada
-		                stepmax=2e6, # passos máximos da rede
+		                threshold=0.01, # valor de parada
+		                stepmax=1e7, # passos máximos da rede
 		                err.fct="sse", # tipo erro a ser calculado, sum of square error
-		                act.fct = "tanh",
+		                act.fct = "tanh", rep=nrepet, 
 		                algorithm = "rprop+") # função de ativação
 
 		w <- nn$weights
@@ -85,7 +86,7 @@ for (hh in sprintf("%02.0f", seq(06,72,6))) {   # loop nas previsoes: 06, 12, 18
 		
 		tic ("Previsão")
 		
-		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1]) # faz a previsão com os dados de testes normalizados
+		pr.nn <- compute(nn,test_[,1:ncol(test_[1,])-1], rep=nrepet) # faz a previsão com os dados de testes normalizados
 		pr.nn_ <- pr.nn$net.result*(max(data$d)-min(data$d))+min(data$d) # retorna o resultado para os valores não normalizados
 		
 		#test.r <- (test_$d)*(max(data$d)-min(data$d))+min(data$d) # retorna os dados de output do teste que haviam sido normalizado. Mesmo que teste$d
